@@ -27,6 +27,6 @@ func NewAPIError(code int, message string) render.Renderer {
 
 func CloseOrLog(closable io.Closer) {
 	if err := closable.Close(); err != nil {
-		fmt.Println("closing_object_failed")
+		fmt.Println("closing_object_failed: ", err.Error())
 	}
 }
