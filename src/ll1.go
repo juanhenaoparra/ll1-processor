@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -41,13 +42,21 @@ func LL1Process(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req.RemoveLeftRecursion()
-
-	//TODO: after remove left recursion, find first, follow and predicition set
-
-	b, err := json.Marshal(req)
+	err = req.RemoveLeftRecursion()
 	if err != nil {
-		rend(w, r, NewAPIError(http.StatusInternalServerError, "corrupted grammar body"))
+		rend(w, r, NewAPIError(http.StatusBadRequest, fmt.Sprintf("remove left recursion failed: %s", err.Error())))
+		return
+	}
+
+	ll1Response, err := req.ValidateLL1()
+	if err != nil {
+		rend(w, r, NewAPIError(http.StatusBadRequest, fmt.Sprintf("validate ll1 failed: %s", err.Error())))
+		return
+	}
+
+	b, err := json.Marshal(ll1Response)
+	if err != nil {
+		rend(w, r, NewAPIError(http.StatusInternalServerError, "corrupted ll1 response body"))
 		return
 	}
 
@@ -61,10 +70,6 @@ const (
 var (
 	ErrProductionSetAlreadyExists = errors.New("production set already exists")
 )
-
-func (g *Grammar) ValidateLL1() {
-
-}
 
 func (g *Grammar) GetIndexOfNonTerminal(nonterminal string) int {
 	for i, nonterm := range g.Order {
@@ -120,6 +125,10 @@ func (g *Grammar) RemoveLeftRecursion() error {
 		for _, production := range productions {
 			nonterminalPrim := nonterminal + "'"
 
+			if production == LambdaSymbol {
+				continue
+			}
+
 			if !strings.HasPrefix(production, nonterminal) {
 				betaProductions = append(betaProductions, production+nonterminalPrim)
 				continue
@@ -133,6 +142,14 @@ func (g *Grammar) RemoveLeftRecursion() error {
 	}
 
 	return nil
+}
+
+func (g *Grammar) ValidateLL1() (*LL1Response, error) {
+	ll1Response := &LL1Response{
+		Grammar: g,
+	}
+
+	return ll1Response, nil
 }
 
 func UnionStringSet(set []string, valuesToAdd []string) []string {
