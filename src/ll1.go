@@ -2,11 +2,16 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"strings"
 )
 
-type Grammar map[string][]string
+type Grammar struct {
+	Order          []string            `json:"order"`
+	ProductionsSet map[string][]string `json:"productions_set"`
+}
 
 type LL1 struct {
 	First  [][]string `json:"first"`
@@ -18,6 +23,7 @@ type LL1Response struct {
 	Result  *LL1     `json:"result,omitempty"`
 }
 
+// LL1Process process the ll1 endpoint request
 func LL1Process(w http.ResponseWriter, r *http.Request) {
 	req := &Grammar{}
 
@@ -35,5 +41,113 @@ func LL1Process(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO: add processing after marshalling
+	req.RemoveLeftRecursion()
+
+	//TODO: after remove left recursion, find first, follow and predicition set
+
+	b, err := json.Marshal(req)
+	if err != nil {
+		rend(w, r, NewAPIError(http.StatusInternalServerError, "corrupted grammar body"))
+		return
+	}
+
+	w.Write(b)
+}
+
+const (
+	LambdaSymbol string = "λ"
+)
+
+var (
+	ErrProductionSetAlreadyExists = errors.New("production set already exists")
+)
+
+func (g *Grammar) ValidateLL1() {
+
+}
+
+func (g *Grammar) GetIndexOfNonTerminal(nonterminal string) int {
+	for i, nonterm := range g.Order {
+		if nonterm == nonterminal {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func (g *Grammar) GetIndexOfProduction(nonterminal, production string) int {
+	for i, prod := range g.ProductionsSet[production] {
+		if prod == production {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func (g *Grammar) AddProductionGroup(nonterminal string, productions []string) {
+	index := g.GetIndexOfNonTerminal(nonterminal)
+
+	foundProductions, ok := g.ProductionsSet[nonterminal]
+	if ok || index != -1 {
+		g.ProductionsSet[nonterminal] = UnionStringSet(foundProductions, productions)
+		return
+	}
+
+	g.Order = append(g.Order, nonterminal)
+	g.ProductionsSet[nonterminal] = productions
+}
+
+func (g *Grammar) HasLeftRecursion(prefix string, productions []string) bool {
+	for _, production := range productions {
+		if strings.HasPrefix(production, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (g *Grammar) RemoveLeftRecursion() error {
+	for nonterminal, productions := range g.ProductionsSet {
+		if !g.HasLeftRecursion(nonterminal, productions) {
+			continue
+		}
+
+		betaProductions := make([]string, 0, len(productions))
+
+		for _, production := range productions {
+			nonterminalPrim := nonterminal + "'"
+
+			if !strings.HasPrefix(production, nonterminal) {
+				betaProductions = append(betaProductions, production+nonterminalPrim)
+				continue
+			}
+
+			newProduction := strings.TrimPrefix(production, nonterminal) + nonterminalPrim
+			g.AddProductionGroup(nonterminalPrim, []string{newProduction, LambdaSymbol})
+		}
+
+		g.ProductionsSet[nonterminal] = betaProductions
+	}
+
+	return nil
+}
+
+func UnionStringSet(set []string, valuesToAdd []string) []string {
+	setMap := make(map[string]bool)
+
+	for _, v := range set {
+		setMap[v] = true
+	}
+
+	for _, v := range valuesToAdd {
+		if _, ok := setMap[v]; !ok {
+			set = append(set, v)
+			setMap[v] = true
+		}
+	}
+
+	return set
 }

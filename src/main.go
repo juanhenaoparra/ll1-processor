@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 )
 
@@ -18,16 +18,21 @@ func main() {
 	r.Use(middleware.URLFormat)
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 
-	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(middleware.Timeout(1 * time.Second))
 
 	r.Route("/ll1", func(r chi.Router) {
 		r.With(paginate).Post("/", LL1Process)
 	})
 
-	port := ":3001"
+	port := ":3002"
 
-	http.ListenAndServe(port, r)
 	fmt.Println("server running in port ", port)
+
+	err := http.ListenAndServe(port, r) // #nosec
+	if err != nil {
+		fmt.Println("failed server setup: ", err.Error())
+		return
+	}
 }
 
 func paginate(next http.Handler) http.Handler {
