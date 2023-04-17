@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import { postLL1 } from "./api/api.js";
+import MyTable from "./components/table.js";
 
 function App() {
   const [text, setText] = useState("");
+  const [result, setResult] = useState({});
+  const [grammar, setGrammar] = useState({});
 
   function formatGrammar(input) {
     // Dividir la entrada en líneas
@@ -55,15 +58,20 @@ OP -> id | num`;
     const order = getNonTerminalOrder(text);
     const combinedGrammar = Object.assign({}, order, grammar);
     const jsonGrammar = JSON.stringify(combinedGrammar);
-    console.log(jsonGrammar)
     postLL1("http://localhost:3002/ll1", jsonGrammar)
       .then((response) => {
+        if (response.result) {
+          setResult(response.result)
+          setGrammar(response.grammar)
+        }
         console.log(response);
       })
       .catch((error) => {
         console.error(error);
       });
   };
+  console.log(result, grammar);
+
   return (
     <div>
       <h2>Ingrese la Gramática</h2>
@@ -91,6 +99,12 @@ OP -> id | num`;
       >
         Enviar
       </button>
+      {Object.keys(result)
+        ? (<MyTable
+          grammar={grammar}
+          result= {result}
+        />)
+        : null}
     </div>
   );
 }
