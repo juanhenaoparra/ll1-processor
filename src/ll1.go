@@ -94,6 +94,7 @@ func (g *Grammar) GetIndexOfProduction(nonterminal, production string) int {
 }
 
 func (g *Grammar) AddProductionGroup(nonterminal string, productions []string) {
+	nonterminal = strings.TrimSpace(nonterminal)
 	index := g.GetIndexOfNonTerminal(nonterminal)
 
 	foundProductions, ok := g.ProductionsSet[nonterminal]
@@ -132,11 +133,11 @@ func (g *Grammar) RemoveLeftRecursion() error {
 			}
 
 			if !strings.HasPrefix(production, nonterminal) {
-				betaProductions = append(betaProductions, production+nonterminalPrim)
+				betaProductions = append(betaProductions, strings.TrimSpace(production+nonterminalPrim))
 				continue
 			}
 
-			newProduction := strings.TrimPrefix(production, nonterminal) + nonterminalPrim
+			newProduction := strings.TrimSpace(strings.TrimPrefix(production, nonterminal) + nonterminalPrim)
 			g.AddProductionGroup(nonterminalPrim, []string{newProduction, LambdaSymbol})
 		}
 
@@ -194,7 +195,7 @@ func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]strin
 	for _, production := range productions {
 		if production == LambdaSymbol {
 			firstSet = append(firstSet, LambdaSymbol)
-			return firstSet, nil
+			continue
 		}
 
 		allWords := strings.Split(production, " ")
@@ -202,7 +203,7 @@ func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]strin
 		for _, word := range allWords {
 			if IsTerminal(set, word) {
 				firstSet = append(firstSet, word)
-				return firstSet, nil
+				break
 			}
 
 			foundFirstSet, err := GetFirstOfNonterminal(set, word)
@@ -211,6 +212,7 @@ func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]strin
 			}
 
 			firstSet = append(firstSet, foundFirstSet...)
+			break
 		}
 	}
 
