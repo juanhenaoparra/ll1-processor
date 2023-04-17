@@ -15,8 +15,8 @@ type Grammar struct {
 }
 
 type LL1 struct {
-	First  [][]string `json:"first"`
-	Follow [][]string `json:"follow"`
+	First  map[string][]string `json:"first"`
+	Follow map[string][]string `json:"follow"`
 }
 
 type LL1Response struct {
@@ -69,6 +69,8 @@ const (
 
 var (
 	ErrProductionSetAlreadyExists = errors.New("production set already exists")
+	ErrProductionsSetNotFound     = errors.New("productions set not found")
+	ErrProductionIndexNotFound    = errors.New("production index not found")
 )
 
 func (g *Grammar) GetIndexOfNonTerminal(nonterminal string) int {
@@ -123,7 +125,7 @@ func (g *Grammar) RemoveLeftRecursion() error {
 		betaProductions := make([]string, 0, len(productions))
 
 		for _, production := range productions {
-			nonterminalPrim := nonterminal + "'"
+			nonterminalPrim := " " + nonterminal + "'"
 
 			if production == LambdaSymbol {
 				continue
@@ -147,9 +149,84 @@ func (g *Grammar) RemoveLeftRecursion() error {
 func (g *Grammar) ValidateLL1() (*LL1Response, error) {
 	ll1Response := &LL1Response{
 		Grammar: g,
+		Result:  &LL1{},
 	}
 
+	first, err := g.ComputeFirst()
+	if err != nil {
+		return nil, err
+	}
+
+	ll1Response.Result.First = first
+
 	return ll1Response, nil
+}
+
+func IsTerminal(set map[string][]string, v string) bool {
+	_, ok := set[v]
+
+	return !ok
+}
+
+func (g *Grammar) ComputeFirst() (map[string][]string, error) {
+	first := make(map[string][]string)
+
+	for _, nonterminal := range g.Order {
+		nonterminalFirst, err := GetFirstOfNonterminal(g.ProductionsSet, nonterminal)
+		if err != nil {
+			return nil, err
+		}
+
+		first[nonterminal] = nonterminalFirst
+	}
+
+	return first, nil
+}
+
+func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]string, error) {
+	productions, ok := set[nonterminal]
+	if !ok {
+		return []string{}, ErrProductionsSetNotFound
+	}
+
+	firstSet := make([]string, 0, len(productions))
+
+	for _, production := range productions {
+		if production == LambdaSymbol {
+			firstSet = append(firstSet, LambdaSymbol)
+			return firstSet, nil
+		}
+
+		allWords := strings.Split(production, " ")
+
+		for _, word := range allWords {
+			if IsTerminal(set, word) {
+				firstSet = append(firstSet, word)
+				return firstSet, nil
+			}
+
+			foundFirstSet, err := GetFirstOfNonterminal(set, word)
+			if err != nil {
+				return firstSet, err
+			}
+
+			firstSet = append(firstSet, foundFirstSet...)
+		}
+	}
+
+	firstSet = UnionStringSet(firstSet, firstSet)
+
+	return firstSet, nil
+}
+
+func ContainsAny(l []string, v string) (int, bool) {
+	for i, item := range l {
+		if item == v {
+			return i, true
+		}
+	}
+
+	return -1, false
 }
 
 func UnionStringSet(set []string, valuesToAdd []string) []string {
