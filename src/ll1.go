@@ -200,7 +200,7 @@ func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]strin
 
 		allWords := strings.Split(production, " ")
 
-		for _, word := range allWords {
+		for i, word := range allWords {
 			if IsTerminal(set, word) {
 				firstSet = append(firstSet, word)
 				break
@@ -211,6 +211,13 @@ func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]strin
 				return firstSet, err
 			}
 
+			_, containsLambda := ContainsAny(foundFirstSet, LambdaSymbol)
+
+			if containsLambda && i < len(allWords)-1 {
+				firstSet = append(firstSet, RemoveElement(foundFirstSet, LambdaSymbol)...)
+				continue
+			}
+
 			firstSet = append(firstSet, foundFirstSet...)
 			break
 		}
@@ -219,6 +226,22 @@ func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]strin
 	firstSet = UnionStringSet(firstSet, firstSet)
 
 	return firstSet, nil
+}
+
+func RemoveElement(l []string, v string) []string {
+	set := make(map[string]bool)
+	for _, value := range l {
+		set[value] = true
+	}
+
+	delete(set, v)
+
+	newList := make([]string, 0, len(set))
+	for value := range set {
+		newList = append(newList, value)
+	}
+
+	return newList
 }
 
 func ContainsAny(l []string, v string) (int, bool) {
