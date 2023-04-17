@@ -15,8 +15,9 @@ type Grammar struct {
 }
 
 type LL1 struct {
-	First  map[string][]string `json:"first"`
-	Follow map[string][]string `json:"follow"`
+	First      map[string][]string `json:"first"`
+	Follow     map[string][]string `json:"follow"`
+	Prediction map[string][]string `json:"prediction"`
 }
 
 type LL1Response struct {
@@ -166,8 +167,27 @@ func (g *Grammar) ValidateLL1() (*LL1Response, error) {
 
 	ll1Response.Result.First = first
 	ll1Response.Result.Follow = follow
+	ll1Response.Result.Prediction = g.ComputePredictionSet(first, follow)
 
 	return ll1Response, nil
+}
+
+func (g *Grammar) ComputePredictionSet(first, follow map[string][]string) map[string][]string {
+	predictionSet := map[string][]string{}
+
+	for _, nonterminal := range g.Order {
+		values := first[nonterminal]
+
+		_, containsLambda := ContainsAny(values, LambdaSymbol)
+
+		if containsLambda {
+			values = follow[nonterminal]
+		}
+
+		predictionSet[nonterminal] = values
+	}
+
+	return predictionSet
 }
 
 func IsTerminal(set map[string][]string, v string) bool {
