@@ -65,6 +65,7 @@ func LL1Process(w http.ResponseWriter, r *http.Request) {
 
 const (
 	LambdaSymbol string = "λ"
+	DollarSymbol string = "$"
 )
 
 var (
@@ -158,7 +159,13 @@ func (g *Grammar) ValidateLL1() (*LL1Response, error) {
 		return nil, err
 	}
 
+	follow, err := g.ComputeFollow(first)
+	if err != nil {
+		return nil, err
+	}
+
 	ll1Response.Result.First = first
+	ll1Response.Result.Follow = follow
 
 	return ll1Response, nil
 }
@@ -228,6 +235,117 @@ func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]strin
 	return firstSet, nil
 }
 
+func (g *Grammar) ComputeFollow(firstSet map[string][]string) (map[string][]string, error) {
+	follow := make(map[string][]string)
+
+	for i, nonterminal := range g.Order {
+		if i == 0 {
+			follow[nonterminal] = []string{DollarSymbol}
+		}
+
+		foundFollow, err := GetFollowOfNonterminal(g.ProductionsSet, firstSet, follow, nonterminal)
+		if err != nil {
+			return nil, err
+		}
+
+		follow[nonterminal] = UnionStringSet(foundFollow, foundFollow)
+	}
+
+	for nonterminal, follows := range follow {
+		follow[nonterminal] = UnionStringSet(follows, follows)
+	}
+
+	return follow, nil
+}
+
+func GetFollowingFromProduction(production string, value string) string {
+	productionSplitted := strings.SplitN(production, value, 2)
+
+	if len(production) <= 1 {
+		return LambdaSymbol
+	}
+
+	return strings.Split(strings.TrimSpace(productionSplitted[1]), " ")[0]
+}
+
+func FindNonterminalOccurrences(set map[string][]string, nonterminalSearched string) map[string][]string {
+	ocurrences := make(map[string][]string)
+
+	for nonterminal, productions := range set {
+		for _, production := range productions {
+			if !ContainsWord(production, nonterminalSearched) {
+				continue
+			}
+
+			if _, ok := ocurrences[nonterminal]; !ok {
+				ocurrences[nonterminal] = []string{}
+			}
+
+			ocurrences[nonterminal] = append(ocurrences[nonterminal], GetFollowingFromProduction(production, nonterminalSearched))
+		}
+	}
+
+	return ocurrences
+}
+
+func p(a any) string {
+	b, _ := json.Marshal(a)
+	return string(b)
+}
+
+func GetFollowOfNonterminal(set map[string][]string, first map[string][]string, currentFollows map[string][]string, nonterminal string) ([]string, error) {
+	follows := currentFollows[nonterminal]
+	foundNonterminalOcurrences := FindNonterminalOccurrences(set, nonterminal)
+
+	fmt.Println("nt: ", nonterminal, ", occ: ", p(foundNonterminalOcurrences))
+
+	for nt, productions := range foundNonterminalOcurrences {
+		for _, production := range productions {
+			isTerminal := IsTerminal(set, production)
+			if isTerminal && production != "" {
+				follows = append(follows, production)
+				continue
+			}
+
+			if production == "" {
+				follows = append(follows, currentFollows[nt]...)
+				continue
+			}
+
+			if production == LambdaSymbol {
+				recursiveFollows, err := GetFollowOfNonterminal(set, first, currentFollows, nt)
+				if err != nil {
+					return nil, err
+				}
+
+				follows = append(follows, recursiveFollows...)
+
+				continue
+			}
+
+			firstOfProduction := first[production]
+
+			follows = append(follows, RemoveElement(firstOfProduction, LambdaSymbol)...)
+
+			if _, containsLambda := ContainsAny(firstOfProduction, LambdaSymbol); containsLambda {
+				recursiveFollows, err := GetFollowOfNonterminal(set, first, currentFollows, nt)
+				if err != nil {
+					return nil, err
+				}
+
+				follows = append(follows, recursiveFollows...)
+
+				continue
+			}
+		}
+	}
+
+	follows = UnionStringSet(follows, follows)
+	currentFollows[nonterminal] = follows
+
+	return follows, nil
+}
+
 func RemoveElement(l []string, v string) []string {
 	set := make(map[string]bool)
 	for _, value := range l {
@@ -256,17 +374,33 @@ func ContainsAny(l []string, v string) (int, bool) {
 
 func UnionStringSet(set []string, valuesToAdd []string) []string {
 	setMap := make(map[string]bool)
+	unionSet := make([]string, 0, len(set)+len(valuesToAdd))
 
 	for _, v := range set {
-		setMap[v] = true
+		if _, ok := setMap[v]; !ok {
+			setMap[v] = true
+			unionSet = append(unionSet, v)
+		}
 	}
 
 	for _, v := range valuesToAdd {
 		if _, ok := setMap[v]; !ok {
-			set = append(set, v)
+			set = append(unionSet, v)
 			setMap[v] = true
 		}
 	}
 
-	return set
+	return unionSet
+}
+
+func ContainsWord(production, word string) bool {
+	words := strings.Split(production, " ")
+
+	for _, w := range words {
+		if w == word {
+			return true
+		}
+	}
+
+	return false
 }
