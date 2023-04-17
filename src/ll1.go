@@ -214,7 +214,7 @@ func (g *Grammar) ComputeFirst() (map[string][]string, error) {
 func GetFirstOfNonterminal(set map[string][]string, nonterminal string) ([]string, error) {
 	productions, ok := set[nonterminal]
 	if !ok {
-		return []string{}, ErrProductionsSetNotFound
+		return []string{}, fmt.Errorf("searching for %s: %w", nonterminal, ErrProductionsSetNotFound)
 	}
 
 	firstSet := make([]string, 0, len(productions))
